@@ -30,7 +30,7 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count,
 
     best_search_time = float('inf')
     for i in range(run_count):
-        print('Run %d/%d...' % (i + 1, run_count), flush=True)
+        print('[{}] Run {}/{}...'.format(datetime.datetime.now(), i + 1, run_count), flush=True)
         # a bit dumb but can't be a scalar since of Python's scoping rules
         n_items_processed = [0]
 
@@ -204,6 +204,9 @@ function""" % (definition.module, definition.constructor, definition.arguments)
             descriptor["dataset"] = dataset
             store_results(dataset, count, definition,
                           query_arguments, descriptor, results, batch)
+    except Exception as e:
+        print("Error occurred when running: ", str(e), file=sys.stderr, flush=True)
+        raise e
     finally:
         algo.done()
 

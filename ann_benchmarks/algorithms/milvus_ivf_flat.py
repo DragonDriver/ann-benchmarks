@@ -29,9 +29,17 @@ class MilvusIVFFLAT(BaseANN):
         self._res = None
 
     def get_memory_usage(self):
-        _, reply = self._milvus._cmd("get_system_info")
-        info = json.loads(reply)
-        return int(info["memory_used"]) / 1024
+        _, exist = self._milvus.has_collection(self._table_name)
+        if not exist:
+            return 0.0
+
+        _, stats = self._milvus.get_collection_stats(self._table_name)
+        size = 0
+        for p in stats["partitions"]:
+            for s in p["segments"]:
+                size += int(s["data_size"])
+
+        return size / 1024
 
     def support_batch_fit(self):
         return True
@@ -167,12 +175,15 @@ class MilvusIVFFLAT(BaseANN):
     def __str__(self):
         return 'MilvusIVFFLAT(index={}, index_param={}, search_param={})'.format(self._index_type, self._index_param, self._search_param)
 
-    # def done(self):
-    #     self._milvus.drop_collection(self._table_name)
+    def done(self):
+        print("Delete table ", self._table_name, "......")
+        self._milvus.drop_collection(self._table_name)
+
 
 class MilvusIVFSQ8(MilvusIVFFLAT):
     def __str__(self):
         return 'MilvusIVFSQ8(index={}, index_param={}, search_param={})'.format(self._index_type, self._index_param, self._search_param)
+
 
 class MilvusIVFSQ8H(MilvusIVFFLAT):
     def __str__(self):

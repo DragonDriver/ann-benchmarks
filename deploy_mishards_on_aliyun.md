@@ -64,6 +64,8 @@ docker run -d --name milvus_cpu_0.10.2 \
 milvusdb/milvus:0.10.2-cpu-d081520-8a2393
 
 docker run -d --name milvus_cpu_0.10.2 -p 19530:19530 -p 19121:19121 -v /mnt/nas/index/db:/var/lib/milvus/db -v /home/$USER/milvus/conf:/var/lib/milvus/conf -v /home/$USER/milvus/logs:/var/lib/milvus/logs -v /home/$USER/milvus/wal:/var/lib/milvus/wal milvusdb/milvus:0.10.2-cpu-d081520-8a2393
+
+docker run -d --name milvus_cpu_0.10.2 -p 19530:19530 -p 19121:19121 -v /mnt/nas/for-create/db:/var/lib/milvus/db -v /home/$USER/milvus/conf:/var/lib/milvus/conf -v /home/$USER/milvus/logs:/var/lib/milvus/logs -v /home/$USER/milvus/wal:/var/lib/milvus/wal milvusdb/milvus:0.10.2-cpu-d081520-8a2393
 ```
 
 ## mishards

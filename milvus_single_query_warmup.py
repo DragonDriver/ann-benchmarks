@@ -20,6 +20,7 @@ def ivfflat_warmup(metric='euclidean',
     query = tests[0]
     client.set_query_arguments(nprobe)
     status, result = client.query(query, 50).result()
+    print("status: ", status)
     print("result: ", result)
     print("len(result): ", len(result))
 

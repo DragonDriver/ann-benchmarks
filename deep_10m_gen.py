@@ -4,6 +4,7 @@ import os
 import struct
 import numpy as np
 import time
+import datetime
 import h5py
 import sys
 
@@ -29,7 +30,7 @@ def bvecs_to_ndarray(bvecs_fn, size=sys.maxsize):
         begin = time.time()
         for i in range(vector_nums):
             if i % 10000 == 0:
-                print("handle %dth vector, time cost: %d" % (i, time.time() - begin))
+                print("[{}] handle {}th vector, time cost: {}".format(datetime.datetime.now(), i, time.time() - begin))
             f.read(4)
             v[i] = struct.unpack('B' * dimension, f.read(dimension))
         
@@ -78,7 +79,7 @@ def handle_deep_1b(out_fn, train_num, query_num, distance, count=100):
             if distance == 'euclidean':
                 train[i] = sklearn.preprocessing.normalize([train[i]], axis=1, norm='l2')[0]
             if i % 100000 == 0:
-                print("handle %dth vector, time cost: %d" % (i, time.time() - begin))
+                print("[{}] handle {}th vector, time cost: {}".format(datetime.datetime.now(), i, time.time() - begin))
 
     neighbors = f.create_dataset('neighbors', (len(test), count), dtype='i')
     distances = f.create_dataset('distances', (len(test), count), dtype='f')
@@ -90,7 +91,7 @@ def handle_deep_1b(out_fn, train_num, query_num, distance, count=100):
     bf.fit(np.array(train))
     for i, x in enumerate(test):
         if i % 1000 == 0:
-            print('%d/%d...' % (i, len(test)))
+            print('[{}] {}/{}...'.format(datetime.datetime.now(), i, len(test)))
         res = list(bf.query_with_distances(x, count))
         res.sort(key=lambda t: t[-1])
         neighbors[i] = [j for j, _ in res]

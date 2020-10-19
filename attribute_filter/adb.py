@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from ann_benchmarks.algorithms.base import BaseANN
+from base import BaseANN
 import psycopg2
 from psycopg2 import extras
 import asyncio
@@ -38,7 +38,7 @@ class AnalyticDB(BaseANN):
                 continue
         self._conn.autocommit = True
         self._cursor = self._conn.cursor()
-        self._table_name = dataset.replace('-', '_')
+        self._table_name = dataset.replace('-', '_') + '_test_filter'
         self._already_nums = 0 # batch fit
 
     def _get_database_size_of_disk(self):
@@ -81,13 +81,19 @@ class AnalyticDB(BaseANN):
         self._conn.commit()
 
     def _create_table(self):
-        create_sql = "create table {} (id int, vector real[])".format(self._table_name)
+        create_sql = "create table {} (id int, field int, vector real[])".format(self._table_name)
         print(create_sql)
         self._cursor.execute(create_sql)
         self._conn.commit()
 
     def _create_index(self, dimension):
         index_sql = "create index on {} using ann(vector) with (dim={})".format(self._table_name, dimension)
+        print(index_sql)
+        t = time.time()
+        self._cursor.execute(index_sql)
+        self._conn.commit()
+        print("create index, time cost: ", time.time() - t)
+        index_sql = "create index on field"
         print(index_sql)
         t = time.time()
         self._cursor.execute(index_sql)
@@ -103,43 +109,44 @@ class AnalyticDB(BaseANN):
     def support_batch_fit(self):
         return True
 
-    def _fit_with_offset(self, X, offset):
+    def _fit_with_offset(self, X, nums, offset):
         row_nums = len(X)
         step = 10000
-        insert_sql = "insert into {}(id, vector) values %s".format(self._table_name)
+        insert_sql = "insert into {}(id, field, vector) values %s".format(self._table_name)
         for i in range(0, row_nums, step):
             end = min(i + step, row_nums)
-            rows = [(j + offset, X[j].tolist()) for j in range(i, end)]
+            rows = [(j + offset, nums[j], X[j].tolist()) for j in range(i, end)]
             psycopg2.extras.execute_values(self._cursor, insert_sql, rows)
             self._conn.commit()
 
-    def batch_fit(self, X, total_num):
+    def batch_fit(self, X, nums, total_num):
         if self._already_nums == 0:
             if self._table_exist():
                 self._drop_table()
             self._create_table()
         assert self._already_nums < total_num
-        self._fit_with_offset(X, self._already_nums)
+        self._fit_with_offset(X, nums, self._already_nums)
         self._already_nums += len(X)
         if self._already_nums >= total_num:
             self._create_index(X.shape[1])
 
-    def fit(self, X):
+    def fit(self, X, nums):
         if self._table_exist():
             self._drop_table()
         self._create_table()
-        self._fit_with_offset(X, 0)
+        self._fit_with_offset(X, nums, 0)
         self._create_index(X.shape[1])
 
     def set_query_arguments(self, useless='useless'):
         pass
 
-    def query(self, v, n):
+    def query(self, v, n, upper_bound):
         query_sql = """select id
                        from {}
+                       where field < {}
                        order by vector <-> array{}
                        limit {}
-        """.format(self._table_name, v.tolist(), n)
+        """.format(self._table_name, upper_bound, v.tolist(), n)
         self._cursor.execute(query_sql)
         ids = self._cursor.fetchall()
         return ids
@@ -189,27 +196,27 @@ class AnalyticDBAsync(AnalyticDB):
         async with self._db_pool.acquire() as conn:
             await conn.copy_records_to_table(self._table_name, records=records)
 
-    def _fit_with_offset(self, X, offset):
+    def _fit_with_offset(self, X, nums, offset):
         async def insert_records():
             row_nums = len(X)
             step = 10000
             coros = []
             for i in range(0, row_nums, step):
                 end = min(i + step, row_nums)
-                rows = [(j + offset, X[j].tolist()) for j in range(i, end)]
+                rows = [(j + offset, nums[j], X[j].tolist()) for j in range(i, end)]
                 coros.append(self.batch_insert(rows))
             await asyncio.gather(*coros)
 
         self._el.run_until_complete(insert_records())
 
-    def batch_query(self, X, n):
+    def batch_query(self, X, n, upper_bound):
         # query_sql = "select id from {} order by vector <-> array$1 limit {}".format(self._table_name, n)
 
         rows = list(range(len(X)))
         async def query_async():
             async def single_query(i):
                 async with self._db_pool.acquire() as conn:
-                    sql = "select id from {} order by vector <-> array{} limit {}".format(self._table_name, X[i].tolist(), n)
+                    sql = "select id from {} where field < {} order by vector <-> array{} limit {}".format(self._table_name, upper_bound, X[i].tolist(), n)
                     rows[i] = await conn.fetch(sql)
                     # rows[i] = await conn.fetch(query_sql, X[i].tolist())
 

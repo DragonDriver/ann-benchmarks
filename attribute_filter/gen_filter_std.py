@@ -2,13 +2,37 @@ import h5py
 import numpy
 import random
 import milvus
+import os
 
 DISTINCT_NUMS = 100000
-SELECTIVITY = 0
+SELECTIVITY = 0.95
 UPPER_BOUND = round(DISTINCT_NUMS - DISTINCT_NUMS * SELECTIVITY)
 
-DATA_SIZE = 1000000
+DATA_SIZE = 10000000
 QUERY_NUM = 10000
+
+group_nums = (DATA_SIZE + DISTINCT_NUMS - 1) // (DISTINCT_NUMS)
+print("group_nums: ", group_nums)
+int_fn = '../data/attribute_filter/sift-%d-%d-intfield.txt' % (DATA_SIZE, QUERY_NUM)
+distinct_values_grps = []
+if not os.path.isfile(int_fn):
+    for i in range(group_nums):
+        distinct_values = random.sample(range(DISTINCT_NUMS), DISTINCT_NUMS)
+        distinct_values_grps.append(distinct_values)
+    print('generate distinct values done ...')
+    with open(int_fn, 'w') as intf:
+        for i in range(group_nums):
+            for int_field in distinct_values_grps[i]:
+                intf.write(str(int_field) + '\n')
+    print('write distinct values done ...')
+else:
+    with open(int_fn, 'r') as f:
+        nums = [int(line) for line in f.readlines()]
+    print('read distinct values done ...')
+    for i in range(group_nums):
+        distinct_values = nums[i * DISTINCT_NUMS : (i + 1) * DISTINCT_NUMS]
+        # print(len(distinct_values))
+        distinct_values_grps.append(distinct_values)
 
 fn = '../data/sift-%d-%d.hdf5' % (DATA_SIZE, QUERY_NUM)
 ds = h5py.File(fn, 'r')
@@ -30,41 +54,33 @@ if has_table:
     client.drop_collection(collection_name)
 client.create_collection(collection_params)
 
-group_nums = (DATA_SIZE + DISTINCT_NUMS - 1) // (DISTINCT_NUMS)
-print("group_nums: ", group_nums)
-distinct_values_grps = []
+# vectors = numpy.array(ds['train'])
 for i in range(group_nums):
-    distinct_values = random.sample(range(DISTINCT_NUMS), DISTINCT_NUMS)
-    distinct_values_grps.append(distinct_values)
-int_fn = '../data/attribute_filter/sift-%d-%d-%f-intfield.txt' % (DATA_SIZE, QUERY_NUM, SELECTIVITY)
-with open(int_fn, 'w') as intf:
-    for i in range(group_nums):
-        for int_field in distinct_values_grps[i]:
-            intf.write(str(int_field) + '\n')
-
-vectors = numpy.array(ds['train'])
-filter_vector_ids = []
-filter_vectors = []
-for i in range(group_nums):
+    filter_vector_ids = []
+    filter_vectors = []
     distinct_values = distinct_values_grps[i]
+    # print('len(distinct_values): ', len(distinct_values))
+    # print('len(filter_vectors): ', len(filter_vectors))
     for idx, int_value in enumerate(distinct_values):
         global_idx = i * DISTINCT_NUMS + idx
         if int_value < UPPER_BOUND:
             filter_vector_ids.append(global_idx)
-            filter_vectors.append(vectors[global_idx].tolist())
-step = 1000
-records_len = len(filter_vectors)
-print("records_len: ", records_len)
-print("upper_bound: ", UPPER_BOUND)
-for i in range(0, records_len, step):
-    end = min(i + step, records_len)
-    status, ids = client.insert(
-        collection_name=collection_name,
-        records=filter_vectors[i:end],
-        ids=filter_vector_ids[i:end],
-    )
-    if not status.OK():
-        raise Exception("Insert failed. {}".format(status))
+            filter_vectors.append(numpy.array(ds['train'][global_idx]).tolist())
+    # print('len(filter_vectors): ', len(filter_vectors))
+    print('filter {}th gropu vectors done ...'.format(i))
+    step = 1000
+    records_len = len(filter_vectors)
+    print("records_len: ", records_len)
+    print("upper_bound: ", UPPER_BOUND)
+    for j in range(0, records_len, step):
+        end = min(j + step, records_len)
+        status, ids = client.insert(
+            collection_name=collection_name,
+            records=filter_vectors[j:end],
+            ids=filter_vector_ids[j:end],
+        )
+        if not status.OK():
+            raise Exception("Insert failed. {}".format(status))
 index_type = getattr(milvus.IndexType, 'IVF_FLAT')
 index_params = {'nlist': nlist}
 top_k = 50

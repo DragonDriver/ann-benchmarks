@@ -49,3 +49,6 @@ recall = 0.0
 for i in range(len(ans)):
     recall += compute_recall(stds[i], ans[i])
 print("average recall: ", recall / len(ans))
+
+client.done()
+ds.close()

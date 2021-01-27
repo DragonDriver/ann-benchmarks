@@ -8,6 +8,8 @@ install/*.yaml
 install/lib-*/
 data/*
 data
+datagen/*
+datagen
 *.class
 
 # IDE
